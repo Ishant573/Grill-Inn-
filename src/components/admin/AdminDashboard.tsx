@@ -26,6 +26,7 @@ import {
   Phone,
   Globe,
   Flame,
+  Database,
 } from 'lucide-react';
 import {
   Order,
@@ -38,6 +39,7 @@ import {
 } from '../../types/cafeteria';
 import { cafeteriaService } from '../../services/cafeteriaService';
 import { KitchenReceiptModal } from './KitchenReceiptModal';
+import { SupabaseDiagnosticModal } from '../SupabaseDiagnosticModal';
 import { playOrderNotificationSound } from '../../lib/sound';
 
 interface AdminDashboardProps {
@@ -81,6 +83,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // KOT Modal
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
+  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState<boolean>(false);
 
   // Cancel Order Modal State
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
@@ -417,6 +420,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             title={soundEnabled ? 'Order sound alert ON (click to mute)' : 'Order sound alert OFF (click to enable)'}
           >
             {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          {/* Supabase Connection Diagnostics */}
+          <button
+            onClick={() => setIsDiagnosticOpen(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#1a2e22] text-emerald-300 border border-emerald-800 hover:bg-[#203a2b] transition-colors flex items-center gap-1.5"
+            title="Test Supabase database connection and diagnostics"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">DB Status</span>
           </button>
 
           {/* View Storefront */}
@@ -1422,6 +1435,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
       )}
+      {/* Supabase Diagnostic Modal */}
+      <SupabaseDiagnosticModal
+        isOpen={isDiagnosticOpen}
+        onClose={() => setIsDiagnosticOpen(false)}
+      />
     </div>
   );
 };

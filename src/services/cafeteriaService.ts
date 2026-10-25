@@ -4,6 +4,7 @@ import {
   MenuItem,
   Order,
   OrderStatus,
+  OrderType,
   CreateOrderPayload,
   AdminUser,
   CafeteriaSettings,
@@ -199,32 +200,40 @@ function saveStoredOrders(orders: Order[]): void {
 // Automatically generate 3-digit order numbers: 001, 002, 003, 004...
 export function getNextOrderNumber(): string {
   let counter = 3;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.SEQ_COUNTER);
-    if (raw) {
-      counter = parseInt(raw, 10);
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SEQ_COUNTER);
+      if (raw) {
+        counter = parseInt(raw, 10);
+      }
+      counter += 1;
+      localStorage.setItem(STORAGE_KEYS.SEQ_COUNTER, counter.toString());
+    } catch {
+      counter += 1;
     }
-  } catch {
-    counter = 3;
+  } else {
+    counter = Math.floor(Math.random() * 800) + 100;
   }
-  counter += 1;
-  localStorage.setItem(STORAGE_KEYS.SEQ_COUNTER, counter.toString());
   return String(counter).padStart(3, '0');
 }
 
 // Automatically generate 3-digit table numbers: Table 001, Table 002, Table 003...
 export function getNextTableNumber(): string {
   let counter = 2;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.TABLE_COUNTER);
-    if (raw) {
-      counter = parseInt(raw, 10);
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.TABLE_COUNTER);
+      if (raw) {
+        counter = parseInt(raw, 10);
+      }
+      counter += 1;
+      localStorage.setItem(STORAGE_KEYS.TABLE_COUNTER, counter.toString());
+    } catch {
+      counter += 1;
     }
-  } catch {
-    counter = 2;
+  } else {
+    counter = Math.floor(Math.random() * 20) + 1;
   }
-  counter += 1;
-  localStorage.setItem(STORAGE_KEYS.TABLE_COUNTER, counter.toString());
   return `Table ${String(counter).padStart(3, '0')}`;
 }
 
@@ -464,33 +473,107 @@ export const cafeteriaService = {
           p_customer_phone: payload.customer_phone.trim(),
           p_order_type: payload.order_type,
           p_table_number: payload.order_type === 'dine_in' ? finalTableNumber : null,
-          p_special_instructions: payload.special_instructions?.trim() || null,
-          p_items: payload.items,
+          p_notes: payload.special_instructions?.trim() || null,
+          p_items: payload.items.map((it) => ({
+            menu_item_id: it.menu_item_id,
+            quantity: it.quantity,
+          })),
         });
 
         if (error) {
-          console.warn('Supabase RPC returned error, transitioning to built-in fallback:', error.message);
+          console.warn('Supabase RPC returned notice, transitioning to built-in fallback:', error.message);
         } else if (data?.order_id) {
-          // Fetch full order with snapshot items
-          const { data: fullOrder } = await supabase
-            .from('orders')
-            .select('*, items:order_items(*)')
-            .eq('id', data.order_id)
-            .single();
+          // Calculate verified items snapshot for display
+          const currentMenuItems = await this.getMenuItems();
+          const menuMap = new Map(currentMenuItems.map((m) => [m.id, m]));
+          const snapshotItems: OrderItemSnapshot[] = payload.items.map((it) => {
+            const m = menuMap.get(it.menu_item_id);
+            const price = m?.price || 0;
+            return {
+              id: 'orditem-' + Math.random().toString(36).substring(2, 9),
+              menu_item_id: it.menu_item_id,
+              item_name_snapshot: m?.name || 'Menu Item',
+              unit_price: price,
+              quantity: it.quantity,
+              line_total: price * it.quantity,
+            };
+          });
 
-          if (fullOrder) {
-            playOrderNotificationSound();
-            return { order: fullOrder, trackingToken: fullOrder.tracking_token };
+          // Attempt to fetch full order from table
+          let fullOrder: Order | null = null;
+          try {
+            const { data: dbOrder } = await supabase
+              .from('orders')
+              .select('*, items:order_items(*)')
+              .eq('id', data.order_id)
+              .single();
+
+            if (dbOrder) {
+              fullOrder = {
+                id: dbOrder.id,
+                order_number: String(dbOrder.order_number || data.order_number || '1').padStart(3, '0'),
+                customer_name: dbOrder.customer_name || payload.customer_name,
+                customer_phone: dbOrder.customer_phone || payload.customer_phone,
+                order_type: dbOrder.order_type || payload.order_type,
+                table_number: dbOrder.table_number || finalTableNumber,
+                special_instructions: dbOrder.notes || payload.special_instructions || null,
+                subtotal: Number(dbOrder.subtotal || data.subtotal || 0),
+                total_amount: Number(dbOrder.subtotal || data.subtotal || 0),
+                status: (dbOrder.status === 'pending' ? 'new' : dbOrder.status) as OrderStatus,
+                tracking_token: dbOrder.tracking_token || data.tracking_token || dbOrder.id,
+                created_at: dbOrder.created_at || new Date().toISOString(),
+                updated_at: dbOrder.updated_at || new Date().toISOString(),
+                items: (dbOrder.items || []).map((it: Record<string, unknown>) => ({
+                  id: String(it.id || ''),
+                  order_id: String(it.order_id || ''),
+                  menu_item_id: String(it.menu_item_id || ''),
+                  item_name_snapshot: String(it.item_name || it.item_name_snapshot || 'Item'),
+                  unit_price: Number(it.unit_price || 0),
+                  quantity: Number(it.quantity || 1),
+                  line_total: Number(it.line_total || 0),
+                })),
+              };
+            }
+          } catch {
+            // Direct table read might require RLS configuration in Supabase SQL editor
           }
+
+          if (!fullOrder) {
+            // Confirmed database order from RPC execution
+            const trackingToken = data.tracking_token || data.order_id;
+            const subtotalVal = Number(data.subtotal || 0);
+            fullOrder = {
+              id: data.order_id,
+              order_number: String(data.order_number || getNextOrderNumber()).padStart(3, '0'),
+              customer_name: payload.customer_name.trim(),
+              customer_phone: payload.customer_phone.trim(),
+              order_type: payload.order_type,
+              table_number: payload.order_type === 'dine_in' ? finalTableNumber : null,
+              special_instructions: payload.special_instructions?.trim() || null,
+              subtotal: subtotalVal,
+              total_amount: subtotalVal,
+              status: 'new',
+              tracking_token: trackingToken,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              items: snapshotItems,
+            };
+          }
+
+          const orders = getStoredOrders();
+          orders.unshift(fullOrder);
+          saveStoredOrders(orders);
+          playOrderNotificationSound();
+          notifyOrderListeners('INSERT', fullOrder);
+          return { order: fullOrder, trackingToken: fullOrder.tracking_token };
         }
       } catch (rpcErr) {
         console.warn('Supabase RPC network/connection unavailable, using local ordering engine:', rpcErr);
-        // Do not rethrow! Proceed to local engine below to fulfill the customer order without failure.
       }
     }
 
     // 3. Fallback / Built-in Local Engine (Ensures 100% atomic execution in preview and offline)
-    const currentMenuItems = getStoredMenuItems();
+    const currentMenuItems = await this.getMenuItems();
     const menuMap = new Map(currentMenuItems.map((m) => [m.id, m]));
 
     let calculatedSubtotal = 0;
@@ -644,7 +727,33 @@ export const cafeteriaService = {
 
         const { data, error } = await query;
         if (!error && data && data.length > 0) {
-          orders = data;
+          orders = data.map((o: Record<string, unknown>) => ({
+            id: String(o.id || ''),
+            order_number: String(o.order_number || '1').padStart(3, '0'),
+            customer_name: String(o.customer_name || 'Customer'),
+            customer_phone: String(o.customer_phone || ''),
+            order_type: (o.order_type || 'takeaway') as OrderType,
+            table_number: (o.table_number as string | null) || null,
+            special_instructions: (o.notes as string | null) || (o.special_instructions as string | null) || null,
+            subtotal: Number(o.subtotal || 0),
+            total_amount: Number(o.subtotal || o.total_amount || 0),
+            status: ((o.status === 'pending' ? 'new' : o.status) || 'new') as OrderStatus,
+            cancellation_reason: (o.cancellation_reason as string | null) || null,
+            tracking_token: String(o.tracking_token || o.id || ''),
+            created_at: String(o.created_at || new Date().toISOString()),
+            updated_at: String(o.updated_at || new Date().toISOString()),
+            items: Array.isArray(o.items)
+              ? (o.items as Record<string, unknown>[]).map((it) => ({
+                  id: String(it.id || ''),
+                  order_id: String(it.order_id || ''),
+                  menu_item_id: String(it.menu_item_id || ''),
+                  item_name_snapshot: String(it.item_name || it.item_name_snapshot || 'Item'),
+                  unit_price: Number(it.unit_price || 0),
+                  quantity: Number(it.quantity || 1),
+                  line_total: Number(it.line_total || 0),
+                }))
+              : [],
+          }));
         } else {
           orders = getStoredOrders();
         }

@@ -11,6 +11,7 @@ import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { Footer } from './components/Footer';
 import { PromotionalBanner } from './components/PromotionalBanner';
+import { SupabaseDiagnosticModal } from './components/SupabaseDiagnosticModal';
 import { cafeteriaService } from './services/cafeteriaService';
 import { Category, MenuItem, Order, CafeteriaSettings, AdminUser } from './types/cafeteria';
 
@@ -35,6 +36,7 @@ function CafeteriaApp() {
   const [confirmationOrder, setConfirmationOrder] = useState<Order | null>(null);
   const [confirmationToken, setConfirmationToken] = useState<string | null>(null);
   const [isConfirmationOpen, setIsConfirmationOpen] = useState<boolean>(false);
+  const [isDiagnosticOpen, setIsDiagnosticOpen] = useState<boolean>(false);
 
   // Fetch Menu Data
   const loadMenuData = useCallback(async () => {
@@ -168,6 +170,7 @@ function CafeteriaApp() {
           settings={settings}
           onAdminClick={() => setCurrentView(adminUser ? 'admin-dashboard' : 'admin-login')}
           onMenuClick={() => setCurrentView('menu')}
+          onDiagnosticClick={() => setIsDiagnosticOpen(true)}
         />
       )}
 
@@ -190,6 +193,11 @@ function CafeteriaApp() {
         order={confirmationOrder}
         trackingToken={confirmationToken}
         onClose={() => setIsConfirmationOpen(false)}
+      />
+
+      <SupabaseDiagnosticModal
+        isOpen={isDiagnosticOpen}
+        onClose={() => setIsDiagnosticOpen(false)}
       />
     </div>
   );

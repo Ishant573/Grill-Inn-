@@ -6,12 +6,14 @@ interface FooterProps {
   settings: CafeteriaSettings;
   onAdminClick: () => void;
   onMenuClick: () => void;
+  onDiagnosticClick?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   settings,
   onAdminClick,
   onMenuClick,
+  onDiagnosticClick,
 }) => {
   return (
     <footer className="bg-[#1f1510] text-[#c4b5a5] border-t border-[#3d2f23] text-xs">
@@ -28,7 +30,7 @@ export const Footer: React.FC<FooterProps> = ({
             <p className="text-xs text-[#a69280] leading-relaxed">
               Now Open in Chuabagh, Munger. Flame-grilled footlongs, burgers, pasta, fried chicken, pizzas, wraps, and Amul ice cream treats.
             </p>
-            <div className="pt-1">
+            <div className="pt-1 flex items-center gap-4">
               <a
                 href={settings.website}
                 target="_blank"
@@ -76,6 +78,17 @@ export const Footer: React.FC<FooterProps> = ({
                   <span>Owner Admin Dashboard</span>
                 </button>
               </li>
+              {onDiagnosticClick && (
+                <li>
+                  <button
+                    onClick={onDiagnosticClick}
+                    className="hover:text-emerald-300 transition-colors flex items-center gap-1.5 pt-1 text-[11px] text-emerald-400"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Supabase Connection Diagnostics</span>
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
         </div>
