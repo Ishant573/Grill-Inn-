@@ -1,0 +1,6 @@
+{
+  "name": "Grill Inn & Amul Ice Cream Munger",
+  "description": "Online cafeteria and restaurant ordering system for Grill Inn & Amul Ice Cream in Chuabagh, Munger, Bihar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
